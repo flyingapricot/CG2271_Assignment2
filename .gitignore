@@ -15,6 +15,7 @@ obj/
 *.bin
 *.hex
 *.log
+*.launch
 
 # Eclipse/MCUXpresso user-specific prefs
 .settings/org.eclipse.core.resources.prefs
