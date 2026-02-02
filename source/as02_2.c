@@ -1,4 +1,4 @@
-//*
+/*
  * Copyright 2016-2025 NXP
  * All rights reserved.
  *
@@ -32,42 +32,179 @@ typedef enum tl {
 
 //TODO
 void setMCGIRClk() {
+    // Clear CLKS
+	// MCG_C1_CLKS_MASK = 0b 1100 0000
+	MCG->C1 = (MCG->C1 & ~MCG_C1_CLKS_MASK);
+
+    // Set IRCLKEN to enable LIRC
+	// MCG_C1_IRCLKEN_MASK = 0b 0000 0010
+	MCG->C1 |= MCG_C1_IRCLKEN_MASK;
+
+    // Choose the 8MHz Clock
+	// MCG_C2_IRCS_MASK = 0b 0000 0001
+	MCG->C2 |= MCG_C2_IRCS_MASK;
+
+    // Set FRCDIV and LIRC_DIV2
+	// Set FRCDIV's division factor to 1 (since we are dividing using LIRC_DIV2)
+	// MCG_SC_FCRDIV_MASK = 0b0000 1110
+	MCG->SC &= ~MCG_SC_FCRDIV_MASK;
+
+	// Set LIRC_DIV2's division factor to 1
+	// MCG_MC_LIRC_DIV2_MASK = 0b0000 0111
+	MCG->MC &= ~MCG_MC_LIRC_DIV2_MASK; // Sets to 000 -> divide by 1
 }
 
 void initTimer() {
+
+    setMCGIRClk();
+
+    // Turn on clock gating for TPM1
+	// SIM_SCGC6_TPM1_MASK = 0b0010 0000 0000 0000 0000 0000 0000
+	SIM->SCGC6 |= SIM_SCGC6_TPM1_MASK;
+
+    // Disable TPM1 Interrupt
+	// TPM_SC_TOIE_MASK = 0b0100 0000
+	TPM1->SC &= ~TPM_SC_TOIE_MASK;
+
+    // Clear TPM clock source and select MCGIRCLK
+
+	// Clear TPM clock source
+	// SIM_SOPT2_TPMSRC_MASK = 0b00000011 00000000 00000000 00000000
+	SIM->SOPT2 &= ~SIM_SOPT2_TPMSRC_MASK;
+
+	// Select MCGIRCLK
+	SIM->SOPT2 |= SIM_SOPT2_TPMSRC_MASK;
+
+    // Turn off TPM 1and clear Prescaler
+
+	// Turn off TPM1
+	// TPM_SC_CMOD_MASK = 0b00000000 00000000 00000000 00011000
+	TPM1->SC &= ~TPM_SC_CMOD_MASK;
+
+    //Clear And Set Prescale Counter
+	TPM1->SC &= ~TPM_SC_PS_MASK; // Clear PS bits
+	TPM1->SC |= (0b111 & TPM_SC_PS_MASK); // Set PS bits to 0b111 (128)
+
+    //Initialize counter to 0
+	TPM1->CNT = 0;
+
+    //Initialize modulo
+	TPM1->MOD = 624;
+
+    //Set priority to highest and enable IRQ
+	NVIC_SetPriority(TPM1_IRQn,0);
+	NVIC_EnableIRQ(TPM1_IRQn);
+
+	// Re-enable TPM Overflow Interrupt
+	TPM1->SC |= TPM_SC_TOIE_MASK;
 }
 
 void startTimer() {
+    TPM1->SC &= ~TPM_SC_CMOD_MASK;
+    TPM1->SC |= TPM_SC_CMOD(1);
 }
 
 void stopTimer() {
+    TPM1->SC &= ~TPM_SC_CMOD_MASK;
 }
 
 void initPWM() {
-    //turn on clock gating to TPM0
+    // Turn on clock gating to TPM0
+	// SIM_SCGC6_TPM0_MASK = 0b00000001 00000000 00000000 00000000
+	SIM->SCGC6 |= SIM_SCGC6_TPM0_MASK;
 
-    //turn on clock gating to PORTD and PORTE
-    //configure the RGB LED MUX
-    //set pins to output
+    // Turn on clock gating to PORTD and PORTE
+	SIM->SCGC5 |= SIM_SCGC5_PORTD_MASK;
+	SIM->SCGC5 |= SIM_SCGC5_PORTE_MASK;
+
+    // Configure the RGB LED MUX
+	PORTE->PCR[31] &= ~PORT_PCR_MUX_MASK; // Clear the MUX Field
+	PORTE->PCR[31] |= PORT_PCR_MUX(3);
+
+	PORTE->PCR[29] &= ~PORT_PCR_MUX_MASK; // Clear the MUX Field
+	PORTE->PCR[29] |= PORT_PCR_MUX(3);
+
+	PORTD->PCR[5] &= ~PORT_PCR_MUX_MASK; // Clear the MUX Field
+	PORTD->PCR[5] |= PORT_PCR_MUX(4);
+
+    // Set pins to output
+	GPIOE->PDDR |= (1u << 31) | (1u << 29); // Red, Blue
+	GPIOD->PDDR |= (1u << 5); // Green
+
     //setup TPM0:
-    //turn off TPM0 by clearing the Clock Mode
-    //clear and set the prescalar
-    //set centre-aligned PWM mode
-    //initialize count to 0
-    //choose and initialize modulo
+
+    // Turn off TPM0 by clearing the Clock Mode
+	// TPM_SC_CMOD_MASK = 0b00000000 00000000 00000000 00011000
+	TPM0->SC &= ~TPM_SC_CMOD_MASK;
+
+    //Clear and Set Prescaler
+	TPM0->SC &= ~TPM_SC_PS_MASK; // Clear PS bits
+	TPM0->SC |= (0b111 & TPM_SC_PS_MASK); // Prescaler to 128
+
+    // Set centre-aligned PWM mode
+	TPM0->SC |= TPM_SC_CPWMS_MASK;
+
+    // Initialize count to 0
+	TPM0->CNT = 0;
+
+    // Choose and initialize modulo
+	TPM0->MOD = 1562; // 250 Hz -> for 20Hz 1562
+
     //Configure TPM0 channels.
+
     //IMPORTANT: Configure a REVERSE PWM signal!!!
     //i.e. it sets when counting up and clears when counting
     //down. This is because the LEDs are active low.
+	// BLUE: TPM0_CH2
+	TPM0->CONTROLS[2].CnSC &= ~(TPM_CnSC_MSA_MASK | TPM_CnSC_MSB_MASK |
+	                           TPM_CnSC_ELSA_MASK | TPM_CnSC_ELSB_MASK);
+	TPM0->CONTROLS[2].CnSC |=  TPM_CnSC_MSB_MASK | TPM_CnSC_ELSA_MASK;
+
+	// RED: TPM0_CH4
+	TPM0->CONTROLS[4].CnSC &= ~(TPM_CnSC_MSA_MASK | TPM_CnSC_MSB_MASK |
+	                           TPM_CnSC_ELSA_MASK | TPM_CnSC_ELSB_MASK);
+	TPM0->CONTROLS[4].CnSC |=  TPM_CnSC_MSB_MASK | TPM_CnSC_ELSA_MASK;
+
+	// GREEN: TPM0_CH5
+	TPM0->CONTROLS[5].CnSC &= ~(TPM_CnSC_MSA_MASK | TPM_CnSC_MSB_MASK |
+	                           TPM_CnSC_ELSA_MASK | TPM_CnSC_ELSB_MASK);
+	TPM0->CONTROLS[5].CnSC |=  TPM_CnSC_MSB_MASK | TPM_CnSC_ELSA_MASK;
 }
 
 void startPWM() {
+	//set CMOD for TPM0
+	TPM0->SC &= ~TPM_SC_CMOD_MASK; // Clear CMOD bits
+	TPM0->SC |= TPM_SC_CMOD(1); // CMOD = 01
 }
 
 void stopPWM() {
+	//mask CMOD for TPM0
+	TPM0->SC &= ~TPM_SC_CMOD_MASK; // CMOD = 00;
 }
 
 void setPWM(int LED, int percent) {
+	if(percent < 0) percent = 0;
+	if(percent > 100) percent = 100;
+
+    uint16_t value = (percent * TPM0->MOD) / 100;
+
+    switch (LED) {
+        case RED:
+            TPM0->CONTROLS[4].CnV = value;
+            break;
+
+        case GREEN:
+            TPM0->CONTROLS[5].CnV = value;
+            break;
+
+        case BLUE:
+            TPM0->CONTROLS[2].CnV = value;
+            break;
+
+        default:
+            printf("invalid LED.\r\n");
+            break;
+    }
 }
 
 volatile int val = 0;
@@ -144,12 +281,12 @@ void PORTA_IRQHandler() {
         stopPWM();
         TPM0->CNT = 0;
             // TODO: write modulo for 20Hz
-        if (TPM0->MOD == ) {
+        if (TPM0->MOD == 1562) {
             // TODO: write modulo for 250Hz
-        	TPM0->MOD = ;
+        	TPM0->MOD = 125;
         } else {
             // TODO: write modulo for 20Hz
-        	TPM0->MOD = ;
+        	TPM0->MOD = 1562;
         }
         startPWM();
 	}
@@ -180,6 +317,7 @@ int main(void) {
     setPWM(BLUE, 0);
     PRINTF("PWM DEMO\r\n");
     startPWM();
+
     startTimer();
 
     /* Enter an infinite loop, just incrementing a counter. */
@@ -187,5 +325,5 @@ int main(void) {
     while(1) {
     	i++;
     }
-    return 0 ;
+    return 0;
 }

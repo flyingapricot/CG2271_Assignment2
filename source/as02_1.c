@@ -57,7 +57,7 @@ void setMCGIRClk() {
 
 void initTimer() {
 
-    //setMCGIRClk(); //uncomment this after question 2
+    setMCGIRClk(); //uncomment this after question 2
 
     // Turn on clock gating for TPM0
 	// SIM_SCGC6_TPM0_MASK = 0b00000001 00000000 00000000 00000000
@@ -87,7 +87,7 @@ void initTimer() {
 
     //Set Prescale Counter
 	TPM0->SC &= ~TPM_SC_PS_MASK; // Clear PS bits
-	TPM0->SC |= (0b011 & TPM_SC_PS_MASK); // Set PS bits to 0b011
+	TPM0->SC |= (0b011 & TPM_SC_PS_MASK); // Set PS bits to 0b011 (8)
 
     //Initialize counter to 0
 	TPM0->CNT = 0;

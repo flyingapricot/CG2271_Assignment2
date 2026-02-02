@@ -21,6 +21,7 @@ obj/
 .settings/org.eclipse.core.resources.prefs
 .settings/org.eclipse.cdt.ui.prefs
 .settings/org.eclipse.cdt.codan.core.prefs
+.settings/org.eclipse.cdt.managedbuilder.core.prefs
 
 # OS-specific clutter
 .DS_Store
