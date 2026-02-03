@@ -148,7 +148,7 @@ void initPWM() {
 	TPM0->CNT = 0;
 
     // Choose and initialize modulo
-	TPM0->MOD = 1562; // 250 Hz -> for 20Hz 1562
+	TPM0->MOD = 1562; // for 250 Hz it should be 125, 20Hz 1562
 
     //Configure TPM0 channels.
 
